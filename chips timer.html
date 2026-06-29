@@ -1,0 +1,1090 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>⏱ たのしいタイマー</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@900&display=swap');
+:root {
+  --col-yellow:#FFD600; --col-orange:#FF6B00; --col-pink:#FF3D8B;
+  --col-purple:#8B2BE2; --col-blue:#0088FF;   --col-cyan:#00C8E0;
+  --col-green:#00CC66;  --col-red:#FF2244;
+  --bg-main:rgba(10,8,30,0.88);
+  --bg-glass:rgba(255,255,255,0.07);
+  --border-glass:rgba(255,255,255,0.15);
+  --text-main:#FFF; --text-muted:rgba(255,255,255,0.55);
+  --timer-font-size:clamp(72px,14vw,120px);
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+html,body{width:100%;height:100%;overflow:hidden;background:transparent;
+  font-family:'Segoe UI','Noto Sans JP',system-ui,sans-serif;user-select:none;}
+
+#app{position:fixed;top:0;left:0;width:100%;height:100%;
+  background:var(--bg-main);backdrop-filter:blur(24px) saturate(160%);
+  -webkit-backdrop-filter:blur(24px) saturate(160%);
+  border:1.5px solid var(--border-glass);border-radius:20px;
+  overflow:hidden;display:flex;flex-direction:column;cursor:move;}
+
+/* ドラッグバー */
+#drag-bar{height:32px;background:rgba(255,255,255,0.04);
+  border-bottom:1px solid var(--border-glass);display:flex;
+  align-items:center;justify-content:space-between;padding:0 14px;flex-shrink:0;cursor:move;}
+.drag-title{font-size:12px;font-weight:700;letter-spacing:.08em;
+  background:linear-gradient(90deg,var(--col-yellow),var(--col-pink));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+.window-dots{display:flex;gap:6px;}
+.w-dot{width:11px;height:11px;border-radius:50%;cursor:pointer;transition:transform .15s,opacity .15s;}
+.w-dot:hover{transform:scale(1.2);opacity:.8;}
+.dot-close{background:#FF5F57;} .dot-min{background:#FEBC2E;}
+
+/* メイン */
+#main{flex:1;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;padding:10px 14px 14px;gap:10px;overflow:hidden;}
+
+/* タイマー表示 */
+/* timer-wrapはリングSVGを基準にサイズが決まる。
+   数字はリングの上にabsoluteで中央揃え。             */
+.timer-wrap{
+  position:relative;
+  display:inline-flex;   /* リングSVGの実寸を持つ */
+  align-items:center;
+  justify-content:center;
+  flex-shrink:0;
+}
+.ring-svg{
+  display:block;         /* static配置でtimer-wrapに高さを与える */
+  transform:rotate(-90deg);
+  pointer-events:none;
+}
+/* 数字とステータスはリングの上に重ねる */
+.timer-center{
+  position:absolute;
+  display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  pointer-events:none;
+}
+#time-display{font-size:var(--timer-font-size);font-weight:900;letter-spacing:-2px;
+  line-height:1;color:var(--text-main);
+  text-shadow:0 0 30px rgba(255,255,255,.4),0 0 60px rgba(0,200,255,.3);
+  transition:color .3s;}
+#time-display.urgent-glow{
+  animation:urgentPulse .5s ease-in-out infinite;
+  color:var(--col-yellow);
+  text-shadow:0 0 20px var(--col-yellow),0 0 50px var(--col-orange);}
+@keyframes urgentPulse{0%,100%{transform:scale(1);}50%{transform:scale(1.04);}}
+#status-text{font-size:12px;color:var(--text-muted);letter-spacing:.1em;
+  font-weight:600;text-transform:uppercase;margin-top:4px;}
+
+/* プリセット */
+.presets{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;}
+.preset-btn{padding:7px 18px;border-radius:50px;border:2px solid var(--border-glass);
+  background:var(--bg-glass);color:var(--text-main);font-size:13px;font-weight:800;
+  cursor:pointer;transition:all .18s;letter-spacing:.04em;}
+.preset-btn:hover{border-color:var(--col-cyan);background:rgba(0,200,224,.15);
+  transform:translateY(-2px) scale(1.04);box-shadow:0 6px 20px rgba(0,200,224,.4);}
+.preset-btn.active{background:linear-gradient(135deg,var(--col-purple),var(--col-blue));
+  border-color:transparent;box-shadow:0 4px 18px rgba(0,100,255,.5);transform:translateY(-1px);}
+.btn-custom{padding:7px 14px;border-radius:50px;border:2px solid var(--col-pink);
+  background:rgba(255,61,139,.12);color:var(--col-pink);font-size:13px;font-weight:800;
+  cursor:pointer;transition:all .18s;letter-spacing:.04em;}
+.btn-custom:hover{background:rgba(255,61,139,.28);transform:translateY(-2px) scale(1.04);
+  box-shadow:0 6px 20px rgba(255,61,139,.4);}
+
+/* コントロール */
+.controls{display:flex;align-items:center;gap:10px;}
+.btn{border:none;cursor:pointer;display:flex;align-items:center;
+  justify-content:center;border-radius:50%;transition:all .18s;}
+.btn-start{width:56px;height:56px;
+  background:linear-gradient(135deg,var(--col-green),var(--col-cyan));
+  color:#fff;box-shadow:0 6px 24px rgba(0,200,100,.55);font-size:22px;}
+.btn-start:hover{transform:scale(1.1);box-shadow:0 10px 32px rgba(0,200,100,.75);}
+.btn-start:active{transform:scale(.95);}
+.btn-reset{width:40px;height:40px;background:var(--bg-glass);
+  border:1.5px solid var(--border-glass);color:var(--text-muted);font-size:17px;}
+.btn-reset:hover{color:var(--col-orange);border-color:var(--col-orange);
+  background:rgba(255,107,0,.12);transform:rotate(-30deg) scale(1.08);}
+.btn-mute{width:40px;height:40px;background:var(--bg-glass);
+  border:1.5px solid var(--border-glass);color:var(--text-muted);font-size:17px;}
+.btn-mute:hover{color:var(--col-yellow);border-color:var(--col-yellow);
+  background:rgba(255,214,0,.12);transform:scale(1.08);}
+.btn-mute.muted{color:rgba(255,255,255,.2);}
+
+#stop-sound-btn{display:none;padding:7px 16px;border-radius:50px;
+  border:2px solid var(--col-red);background:rgba(255,34,68,.18);color:var(--col-red);
+  font-size:12px;font-weight:800;cursor:pointer;transition:all .18s;
+  animation:flashBtn .8s ease-in-out infinite;}
+#stop-sound-btn:hover{background:rgba(255,34,68,.35);transform:scale(1.04);}
+@keyframes flashBtn{0%,100%{box-shadow:0 0 0 rgba(255,34,68,0);}
+  50%{box-shadow:0 0 16px rgba(255,34,68,.8);}}
+
+/* 不透明度スライダー */
+.opacity-row{display:flex;align-items:center;gap:7px;width:100%;padding:0 4px;}
+.opacity-label{font-size:10px;color:var(--text-muted);white-space:nowrap;
+  font-weight:600;letter-spacing:.06em;}
+.opacity-slider{flex:1;-webkit-appearance:none;height:4px;
+  background:rgba(255,255,255,.15);border-radius:2px;outline:none;cursor:pointer;}
+.opacity-slider::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;
+  border-radius:50%;background:linear-gradient(135deg,var(--col-purple),var(--col-cyan));
+  cursor:pointer;box-shadow:0 0 8px rgba(0,200,224,.7);}
+
+/* ========== カスタムモーダル ========== */
+#custom-modal{display:none;position:fixed;inset:0;z-index:200;
+  align-items:center;justify-content:center;
+  background:rgba(0,0,0,.55);backdrop-filter:blur(8px);animation:fadeInOver .25s ease;}
+.custom-card{background:rgba(18,14,48,.97);border:2px solid var(--col-pink);
+  border-radius:24px;padding:28px 32px;display:flex;flex-direction:column;
+  align-items:center;gap:16px;box-shadow:0 0 60px rgba(255,61,139,.3);
+  animation:cardPop .35s cubic-bezier(.34,1.56,.64,1);min-width:260px;}
+.custom-card h2{font-size:18px;font-weight:900;
+  background:linear-gradient(135deg,var(--col-pink),var(--col-yellow));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+  letter-spacing:.06em;}
+.custom-input-row{display:flex;align-items:center;gap:8px;}
+.custom-input-row input{width:72px;background:rgba(255,255,255,.08);
+  border:2px solid var(--border-glass);border-radius:12px;color:var(--text-main);
+  font-size:2rem;font-weight:900;text-align:center;padding:8px 4px;outline:none;
+  -moz-appearance:textfield;transition:border-color .2s;user-select:auto;cursor:text;}
+.custom-input-row input::-webkit-inner-spin-button,
+.custom-input-row input::-webkit-outer-spin-button{-webkit-appearance:none;}
+.custom-input-row input:focus{border-color:var(--col-pink);}
+.custom-input-row .sep{font-size:2rem;font-weight:900;color:var(--text-muted);}
+.custom-input-row .unit{font-size:13px;color:var(--text-muted);font-weight:700;}
+.custom-btns{display:flex;gap:10px;margin-top:4px;}
+.btn-set{padding:10px 28px;border-radius:50px;border:none;
+  background:linear-gradient(135deg,var(--col-pink),var(--col-orange));color:#fff;
+  font-size:14px;font-weight:900;cursor:pointer;transition:all .18s;
+  box-shadow:0 4px 18px rgba(255,61,139,.5);letter-spacing:.04em;}
+.btn-set:hover{transform:scale(1.06);box-shadow:0 8px 28px rgba(255,61,139,.7);}
+.btn-cancel{padding:10px 20px;border-radius:50px;border:2px solid var(--border-glass);
+  background:var(--bg-glass);color:var(--text-muted);font-size:14px;font-weight:800;cursor:pointer;transition:all .18s;}
+.btn-cancel:hover{border-color:var(--text-muted);color:var(--text-main);}
+
+/* ========== カウントダウン大表示 ========== */
+/* z-index:99 でappより上、チップス演出より下。
+   残り10秒になった瞬間にvisibility:hiddenでmainを消す（JSで制御）。
+   カウントダウンレイヤー自体は常にfixedで全体を覆う。         */
+#countdown-layer{
+  display:none;
+  position:fixed;inset:0;z-index:95;
+  align-items:center;justify-content:center;
+  /* アプリ本体と同じ背景でシームレスに覆う */
+  background:var(--bg-main);
+  backdrop-filter:blur(24px) saturate(160%);
+  -webkit-backdrop-filter:blur(24px) saturate(160%);
+  border-radius:20px;
+}
+
+#countdown-num{
+  /* 角丸ポップ体：Nunito / Varela Round / system丸ゴシック */
+  font-family:'Nunito','Varela Round','M PLUS Rounded 1c','Noto Sans JP',
+              'Hiragino Maru Gothic ProN','Meiryo',sans-serif;
+  font-size:clamp(160px,55vw,420px);
+  font-weight:900;
+  line-height:1;
+  letter-spacing:0px;
+  -webkit-text-stroke:7px rgba(255,255,255,0.55);
+  paint-order:stroke fill;
+  text-shadow:
+    0 6px 0 rgba(0,0,0,0.18),
+    0 12px 0 rgba(0,0,0,0.10);
+}
+
+/* ぷるんwobble：控えめ版（伸び幅を小さく、回数を減らす） */
+@keyframes cdWobble{
+  0%  { transform:scale(0.30,0.30); opacity:0; }
+  22% { transform:scale(1.15,0.88); opacity:1; }  /* 少し横に */
+  42% { transform:scale(0.92,1.12); opacity:1; }  /* 少し縦に */
+  58% { transform:scale(1.06,0.95); opacity:1; }
+  72% { transform:scale(0.97,1.04); opacity:1; }
+  84% { transform:scale(1.02,0.99); opacity:1; }
+  100%{ transform:scale(1.00,1.00); opacity:1; }
+}
+
+/* ========== ポテトチップス演出 ========== */
+#chips-layer{display:none;position:fixed;inset:0;z-index:90;overflow:hidden;
+  pointer-events:none;align-items:center;justify-content:center;
+  background:rgba(10,8,30,.75);}
+#bag-wrap{position:relative;z-index:2;display:flex;flex-direction:column;
+  align-items:center;gap:16px;
+  animation:bagEntrance .6s cubic-bezier(.34,1.56,.64,1) forwards;}
+@keyframes bagEntrance{
+  0%{transform:scale(.2) rotate(-25deg);opacity:0;}
+  70%{transform:scale(1.1) rotate(4deg);opacity:1;}
+  100%{transform:scale(1) rotate(0);opacity:1;}}
+#bag-open-text{
+  font-family:'Nunito','Varela Round','M PLUS Rounded 1c','Hiragino Maru Gothic ProN','Meiryo',sans-serif;
+  font-size:clamp(60px,12vw,112px);
+  font-weight:900;
+  letter-spacing:.04em;
+  opacity:0;
+  color:#fff;
+  -webkit-text-stroke:2px rgba(255,255,255,0.3);
+  filter:drop-shadow(0 4px 6px rgba(0,0,0,.4));
+  animation:textReveal .5s ease .55s forwards;
+}
+@keyframes textReveal{
+  from{opacity:0;transform:translateY(24px) scale(.85);}
+  to{opacity:1;transform:translateY(0) scale(1);}}
+
+#chips-container,#confetti-container{position:fixed;inset:0;pointer-events:none;z-index:91;}
+.chip-item{position:absolute;line-height:1;will-change:transform;
+  filter:drop-shadow(0 4px 10px rgba(0,0,0,.4));}
+.confetti{position:absolute;border-radius:2px;will-change:transform;}
+
+/* タイムアップ完了 */
+#done-overlay{display:none;position:fixed;inset:0;z-index:100;
+  align-items:center;justify-content:center;
+  background:rgba(10,8,30,.92);border-radius:20px;animation:fadeInOver .4s ease;}
+@keyframes fadeInOver{from{opacity:0;}to{opacity:1;}}
+.done-card{display:flex;flex-direction:column;align-items:center;gap:10px;
+  padding:28px 40px;border:2px solid var(--col-yellow);border-radius:24px;
+  background:rgba(20,16,50,.97);box-shadow:0 0 60px rgba(255,214,0,.35);
+  animation:cardPop .5s cubic-bezier(.34,1.56,.64,1);}
+@keyframes cardPop{from{transform:scale(.6);opacity:0;}to{transform:scale(1);opacity:1;}}
+.done-title{font-size:clamp(26px,5vw,40px);font-weight:900;
+  background:linear-gradient(135deg,var(--col-yellow),var(--col-orange),var(--col-pink));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+.done-sub{font-size:14px;color:var(--text-muted);}
+.btn-ok{margin-top:6px;padding:10px 30px;border-radius:50px;border:none;
+  background:linear-gradient(135deg,var(--col-yellow),var(--col-orange));color:#1a0800;
+  font-size:15px;font-weight:900;cursor:pointer;letter-spacing:.06em;transition:all .18s;
+  box-shadow:0 6px 20px rgba(255,140,0,.5);}
+.btn-ok:hover{transform:scale(1.07);box-shadow:0 10px 28px rgba(255,140,0,.7);}
+
+.star{position:fixed;pointer-events:none;animation:starFloat 2.5s ease-out forwards;z-index:85;line-height:1;}
+@keyframes starFloat{0%{transform:translate(0,0) scale(1);opacity:1;}
+  100%{transform:translate(var(--tx),var(--ty)) scale(0);opacity:0;}}
+</style>
+</head>
+<body>
+
+<div id="app">
+  <div id="drag-bar">
+    <span class="drag-title">⏱ たのしいタイマー</span>
+    <div class="window-dots">
+      <div class="w-dot dot-min"   id="btn-collapse" title="最小化"></div>
+      <div class="w-dot dot-close" id="btn-close"    title="閉じる"></div>
+    </div>
+  </div>
+
+  <div id="main">
+    <div class="timer-wrap" id="timer-wrap">
+      <svg id="ring-svg" class="ring-svg" width="220" height="220" viewBox="0 0 200 200">
+        <defs>
+          <linearGradient id="ringGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%"   stop-color="#FFD600"/>
+            <stop offset="33%"  stop-color="#FF3D8B"/>
+            <stop offset="66%"  stop-color="#0088FF"/>
+            <stop offset="100%" stop-color="#00CC66"/>
+          </linearGradient>
+        </defs>
+        <circle id="ring-bg"   cx="100" cy="100" r="88" fill="none" stroke="rgba(255,255,255,.06)" stroke-width="8"/>
+        <circle id="ring-prog" cx="100" cy="100" r="88" fill="none" stroke="url(#ringGrad)"
+          stroke-width="8" stroke-linecap="round" stroke-dasharray="553" stroke-dashoffset="553"
+          style="transition:stroke-dashoffset .5s ease,stroke .3s ease;"/>
+      </svg>
+      <div class="timer-center">
+        <div id="time-display">00:00</div>
+        <div id="status-text">設定してスタート</div>
+      </div>
+    </div>
+
+    <div class="presets">
+      <button class="preset-btn" data-minutes="10">10分</button>
+      <button class="preset-btn" data-minutes="30">30分</button>
+      <button class="btn-custom" id="btn-open-custom">✏️ 自由設定</button>
+    </div>
+
+    <div class="controls">
+      <button class="btn btn-reset" id="btn-reset" title="リセット">↺</button>
+      <button class="btn btn-start" id="btn-start" title="スタート">▶</button>
+      <button class="btn btn-mute"  id="btn-mute"  title="音オン/オフ">🔊</button>
+    </div>
+
+    <div class="opacity-row">
+      <span class="opacity-label">透明度</span>
+      <input type="range" id="opacity-slider" class="opacity-slider" min="30" max="97" value="88"/>
+    </div>
+  </div>
+
+  <div id="done-overlay">
+    <div class="done-card">
+      <div style="font-size:clamp(42px,7.5vw,63px);font-weight:900;
+        background:linear-gradient(135deg,#FFD600,#FF3D8B,#0088FF);
+        -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+        background-clip:text;letter-spacing:.06em;text-align:center;">
+        🎉 発表タイム！
+      </div>
+      <button class="btn-ok" id="btn-ok" style="display:none;">はじめに戻る</button>
+    </div>
+  </div>
+</div>
+
+<!-- カスタム設定モーダル -->
+<div id="custom-modal">
+  <div class="custom-card">
+    <h2>⏱ 自由に時間を設定</h2>
+    <div class="custom-input-row">
+      <input type="number" id="custom-min" placeholder="0"  min="0" max="99"/>
+      <span class="unit">分</span>
+      <span class="sep">:</span>
+      <input type="number" id="custom-sec" placeholder="00" min="0" max="59"/>
+      <span class="unit">秒</span>
+    </div>
+    <div class="custom-btns">
+      <button class="btn-set"    id="btn-set-custom">セット！</button>
+      <button class="btn-cancel" id="btn-cancel-custom">キャンセル</button>
+    </div>
+  </div>
+</div>
+
+<!-- カウントダウン大表示（タイマー背景を完全に覆う） -->
+<div id="countdown-layer">
+  <div id="countdown-num"></div>
+</div>
+
+<!-- ポテトチップス演出 -->
+<div id="chips-layer">
+  <!-- 音を止めるボタン：演出中に最前面で表示 -->
+  <button id="stop-sound-btn" style="
+    position:absolute;top:14px;right:14px;z-index:99;
+    pointer-events:auto;display:none;">🔇 音を止める</button>
+  <div id="bag-wrap">
+    <svg id="bag-svg" width="360" height="480" viewBox="0 0 240 320"
+      style="filter:drop-shadow(0 8px 32px rgba(255,200,0,.5));">
+      <ellipse cx="120" cy="300" rx="75" ry="14" fill="rgba(0,0,0,.35)"/>
+      <ellipse cx="120" cy="220" rx="90"  ry="96" fill="#CC9900"/>
+      <ellipse cx="120" cy="215" rx="84"  ry="90" fill="#FFD600"/>
+      <ellipse cx="90"  cy="175" rx="20"  ry="42" fill="rgba(255,255,255,.22)" transform="rotate(-18,90,175)"/>
+      <ellipse cx="148" cy="200" rx="8"   ry="20" fill="rgba(255,255,255,.12)" transform="rotate(10,148,200)"/>
+      <rect x="72" y="65" width="96" height="50" rx="8" fill="#B8860B"/>
+      <line x1="82"  y1="72" x2="82"  y2="110" stroke="rgba(0,0,0,.2)" stroke-width="2"/>
+      <line x1="96"  y1="69" x2="96"  y2="113" stroke="rgba(0,0,0,.2)" stroke-width="2"/>
+      <line x1="110" y1="68" x2="110" y2="114" stroke="rgba(0,0,0,.2)" stroke-width="2"/>
+      <line x1="124" y1="68" x2="124" y2="114" stroke="rgba(0,0,0,.2)" stroke-width="2"/>
+      <line x1="138" y1="68" x2="138" y2="114" stroke="rgba(0,0,0,.2)" stroke-width="2"/>
+      <line x1="152" y1="69" x2="152" y2="113" stroke="rgba(0,0,0,.2)" stroke-width="2"/>
+      <line x1="166" y1="72" x2="166" y2="110" stroke="rgba(0,0,0,.2)" stroke-width="2"/>
+      <ellipse cx="120" cy="64" rx="44" ry="11" fill="#8B6800"/>
+      <ellipse cx="120" cy="60" rx="40" ry="8"  fill="#CC9900"/>
+      <rect x="42" y="178" width="156" height="72" rx="14" fill="rgba(180,90,0,.55)"/>
+      <rect x="46" y="182" width="148" height="64" rx="11" fill="none"
+        stroke="rgba(255,220,0,.6)" stroke-width="2"/>
+      <text x="120" y="210" text-anchor="middle" font-size="22" font-weight="900" fill="#FFD600"
+        font-family="'Segoe UI','Arial Black',sans-serif" letter-spacing="1">TIME UP!</text>
+      <text x="120" y="234" text-anchor="middle" font-size="11" font-weight="700"
+        fill="rgba(255,240,180,.9)" font-family="sans-serif" letter-spacing="2">SUPER CRISPY</text>
+      <text x="62"  y="168" text-anchor="middle" font-size="26" fill="#FF3D8B">★</text>
+      <text x="178" y="168" text-anchor="middle" font-size="26" fill="#FF3D8B">★</text>
+      <text x="50"  y="235" text-anchor="middle" font-size="14" fill="#FFD600">✦</text>
+      <text x="190" y="235" text-anchor="middle" font-size="14" fill="#FFD600">✦</text>
+    </svg>
+    <div id="bag-open-text">おつかれさま！</div>
+  </div>
+</div>
+
+<div id="chips-container"></div>
+<div id="confetti-container"></div>
+
+<!-- ========== SVGイラスト定義（hidden） ========== -->
+<!-- 後でJSからcloneNode()して使う -->
+<svg id="svg-defs" style="display:none" xmlns="http://www.w3.org/2000/svg">
+
+  <!-- ① ブルーベリー3粒セット -->
+  <symbol id="illust-blueberry" viewBox="0 0 120 80">
+    <!-- 葉っぱ -->
+    <ellipse cx="60" cy="10" rx="14" ry="7" fill="#4CAF50" transform="rotate(-15,60,10)"/>
+    <ellipse cx="60" cy="10" rx="14" ry="7" fill="#66BB6A" transform="rotate(10,60,10)"/>
+    <!-- 左の実 -->
+    <circle cx="24" cy="52" r="22" fill="#5C6BC0"/>
+    <circle cx="24" cy="52" r="22" fill="url(#bb-grad1)" opacity=".7"/>
+    <circle cx="16" cy="42" r="6"  fill="rgba(255,255,255,.28)"/>
+    <!-- 実の底の星型くぼみ -->
+    <path d="M24 30 Q26 32 24 34 Q22 32 24 30Z" fill="#3949AB" stroke="none"/>
+    <path d="M20 31 Q24 30 28 31 Q24 29 20 31Z" fill="#3949AB" stroke="none"/>
+    <!-- 中央の実 -->
+    <circle cx="60" cy="55" r="22" fill="#673AB7"/>
+    <circle cx="60" cy="55" r="22" fill="url(#bb-grad2)" opacity=".7"/>
+    <circle cx="52" cy="45" r="6"  fill="rgba(255,255,255,.28)"/>
+    <path d="M60 33 Q62 35 60 37 Q58 35 60 33Z" fill="#4527A0" stroke="none"/>
+    <path d="M56 34 Q60 33 64 34 Q60 32 56 34Z" fill="#4527A0" stroke="none"/>
+    <!-- 右の実 -->
+    <circle cx="96" cy="52" r="22" fill="#5C6BC0"/>
+    <circle cx="96" cy="52" r="22" fill="url(#bb-grad3)" opacity=".7"/>
+    <circle cx="88" cy="42" r="6"  fill="rgba(255,255,255,.28)"/>
+    <path d="M96 30 Q98 32 96 34 Q94 32 96 30Z" fill="#3949AB" stroke="none"/>
+    <path d="M92 31 Q96 30 100 31 Q96 29 92 31Z" fill="#3949AB" stroke="none"/>
+    <!-- グラデ定義 -->
+    <defs>
+      <radialGradient id="bb-grad1" cx="35%" cy="30%"><stop offset="0%" stop-color="#9FA8DA"/><stop offset="100%" stop-color="#3949AB" stop-opacity="0"/></radialGradient>
+      <radialGradient id="bb-grad2" cx="35%" cy="30%"><stop offset="0%" stop-color="#CE93D8"/><stop offset="100%" stop-color="#4527A0" stop-opacity="0"/></radialGradient>
+      <radialGradient id="bb-grad3" cx="35%" cy="30%"><stop offset="0%" stop-color="#9FA8DA"/><stop offset="100%" stop-color="#3949AB" stop-opacity="0"/></radialGradient>
+    </defs>
+  </symbol>
+
+  <!-- ② ポテトチップスのキャラ（サングラスあり） -->
+  <symbol id="illust-chipchan" viewBox="0 0 110 120">
+    <!-- 体（楕円形のチップス） -->
+    <ellipse cx="55" cy="65" rx="44" ry="36" fill="#FFD600"/>
+    <ellipse cx="55" cy="65" rx="44" ry="36" fill="none" stroke="#B8860B" stroke-width="3"/>
+    <!-- チップスの模様（点々） -->
+    <circle cx="38" cy="58" r="4" fill="rgba(180,120,0,.35)"/>
+    <circle cx="55" cy="52" r="3" fill="rgba(180,120,0,.35)"/>
+    <circle cx="70" cy="60" r="4" fill="rgba(180,120,0,.35)"/>
+    <circle cx="44" cy="72" r="3" fill="rgba(180,120,0,.35)"/>
+    <circle cx="66" cy="74" r="3" fill="rgba(180,120,0,.35)"/>
+    <!-- ハイライト -->
+    <ellipse cx="40" cy="52" rx="10" ry="6" fill="rgba(255,255,255,.35)" transform="rotate(-20,40,52)"/>
+    <!-- 顔: 目（サングラス） -->
+    <!-- サングラスフレーム -->
+    <rect x="18" y="30" width="34" height="22" rx="11" fill="#1a1a1a"/>
+    <rect x="58" y="30" width="34" height="22" rx="11" fill="#1a1a1a"/>
+    <!-- サングラスブリッジ -->
+    <line x1="52" y1="40" x2="58" y2="40" stroke="#1a1a1a" stroke-width="4" stroke-linecap="round"/>
+    <!-- サングラスレンズ（グラデ） -->
+    <rect x="20" y="32" width="30" height="18" rx="9" fill="#2979FF" opacity=".7"/>
+    <rect x="60" y="32" width="30" height="18" rx="9" fill="#2979FF" opacity=".7"/>
+    <!-- レンズ光沢 -->
+    <ellipse cx="28" cy="37" rx="6" ry="4" fill="rgba(255,255,255,.4)" transform="rotate(-15,28,37)"/>
+    <ellipse cx="68" cy="37" rx="6" ry="4" fill="rgba(255,255,255,.4)" transform="rotate(-15,68,37)"/>
+    <!-- サングラステンプル（つる） -->
+    <line x1="18" y1="40" x2="8"   y2="36" stroke="#1a1a1a" stroke-width="3" stroke-linecap="round"/>
+    <line x1="92" y1="40" x2="102" y2="36" stroke="#1a1a1a" stroke-width="3" stroke-linecap="round"/>
+    <!-- 口（にっこり） -->
+    <path d="M38 88 Q55 102 72 88" fill="none" stroke="#B8860B" stroke-width="3.5" stroke-linecap="round"/>
+    <!-- 手足 -->
+    <ellipse cx="10"  cy="70" rx="8"  ry="14" fill="#FFD600" stroke="#B8860B" stroke-width="2" transform="rotate(20,10,70)"/>
+    <ellipse cx="100" cy="70" rx="8"  ry="14" fill="#FFD600" stroke="#B8860B" stroke-width="2" transform="rotate(-20,100,70)"/>
+    <ellipse cx="30"  cy="108" rx="10" ry="8"  fill="#FFD600" stroke="#B8860B" stroke-width="2" transform="rotate(-10,30,108)"/>
+    <ellipse cx="80"  cy="108" rx="10" ry="8"  fill="#FFD600" stroke="#B8860B" stroke-width="2" transform="rotate(10,80,108)"/>
+  </symbol>
+
+  <!-- ③ 丸っぽいかわいい蜂 -->
+  <symbol id="illust-bee" viewBox="0 0 110 120">
+    <!-- 羽（後ろ：薄い） -->
+    <ellipse cx="20" cy="30" rx="20" ry="12" fill="rgba(180,220,255,.7)" transform="rotate(-30,20,30)"/>
+    <ellipse cx="90" cy="30" rx="20" ry="12" fill="rgba(180,220,255,.7)" transform="rotate(30,90,30)"/>
+    <!-- 羽（前：光沢） -->
+    <ellipse cx="25" cy="28" rx="18" ry="10" fill="rgba(220,240,255,.85)" transform="rotate(-20,25,28)"/>
+    <ellipse cx="85" cy="28" rx="18" ry="10" fill="rgba(220,240,255,.85)" transform="rotate(20,85,28)"/>
+    <!-- 胴体（まん丸） -->
+    <ellipse cx="55" cy="72" rx="42" ry="44" fill="#FFD600"/>
+    <!-- ボーダー縞模様 -->
+    <clipPath id="bee-clip">
+      <ellipse cx="55" cy="72" rx="42" ry="44"/>
+    </clipPath>
+    <rect x="13" y="57" width="84" height="12" fill="#1A1A1A" clip-path="url(#bee-clip)"/>
+    <rect x="13" y="78" width="84" height="12" fill="#1A1A1A" clip-path="url(#bee-clip)"/>
+    <rect x="13" y="99" width="84" height="12" fill="#1A1A1A" clip-path="url(#bee-clip)"/>
+    <!-- 胴体の縁 -->
+    <ellipse cx="55" cy="72" rx="42" ry="44" fill="none" stroke="#B8860B" stroke-width="2.5"/>
+    <!-- ハイライト -->
+    <ellipse cx="38" cy="54" rx="13" ry="9" fill="rgba(255,255,255,.32)" transform="rotate(-20,38,54)"/>
+    <!-- 顔: 目 -->
+    <circle cx="40" cy="58" r="8" fill="#fff"/>
+    <circle cx="70" cy="58" r="8" fill="#fff"/>
+    <circle cx="43" cy="59" r="5" fill="#1A1A1A"/>
+    <circle cx="73" cy="59" r="5" fill="#1A1A1A"/>
+    <circle cx="44" cy="57" r="2" fill="#fff"/>
+    <circle cx="74" cy="57" r="2" fill="#fff"/>
+    <!-- 頬っぺた -->
+    <ellipse cx="30" cy="68" rx="7" ry="5" fill="rgba(255,100,100,.4)"/>
+    <ellipse cx="80" cy="68" rx="7" ry="5" fill="rgba(255,100,100,.4)"/>
+    <!-- 口 -->
+    <path d="M43 76 Q55 87 67 76" fill="none" stroke="#B8860B" stroke-width="3" stroke-linecap="round"/>
+    <!-- 触角 -->
+    <path d="M42 34 Q34 18 28 12" fill="none" stroke="#1A1A1A" stroke-width="3" stroke-linecap="round"/>
+    <path d="M68 34 Q76 18 82 12" fill="none" stroke="#1A1A1A" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="28" cy="11" r="5" fill="#FF3D8B"/>
+    <circle cx="82" cy="11" r="5" fill="#FF3D8B"/>
+    <!-- 針 -->
+    <path d="M55 116 L50 108 L55 112 L60 108 Z" fill="#B8860B"/>
+  </symbol>
+
+  <!-- ④ 唐辛子2本セット -->
+  <symbol id="illust-chili" viewBox="0 0 120 130">
+    <!-- 葉と茎（左） -->
+    <path d="M38 20 Q28 8 18 12 Q28 16 32 28" fill="#4CAF50" stroke="none"/>
+    <path d="M38 20 Q44 6 54 10 Q44 14 38 28" fill="#66BB6A" stroke="none"/>
+    <line x1="38" y1="22" x2="38" y2="38" stroke="#388E3C" stroke-width="3" stroke-linecap="round"/>
+    <!-- 唐辛子本体（左：赤） -->
+    <path d="M38 38 Q52 40 58 58 Q62 75 56 95 Q50 115 42 118 Q34 118 30 98 Q26 76 28 58 Q32 40 38 38Z"
+      fill="#E53935"/>
+    <path d="M38 38 Q52 40 58 58 Q62 75 56 95 Q50 115 42 118 Q34 118 30 98 Q26 76 28 58 Q32 40 38 38Z"
+      fill="none" stroke="#B71C1C" stroke-width="2"/>
+    <!-- ハイライト（左） -->
+    <path d="M34 48 Q38 44 44 52 Q40 46 34 48Z" fill="rgba(255,255,255,.4)"/>
+    <ellipse cx="36" cy="58" rx="5" ry="12" fill="rgba(255,255,255,.2)" transform="rotate(-8,36,58)"/>
+    <!-- 先っぽ（左） -->
+    <path d="M42 118 Q44 124 40 128 Q38 122 42 118Z" fill="#C62828"/>
+    <!-- 葉と茎（右） -->
+    <path d="M82 14 Q72 2 62 6 Q72 10 76 22" fill="#4CAF50" stroke="none"/>
+    <path d="M82 14 Q88 0 98 4 Q88 8 82 22" fill="#66BB6A" stroke="none"/>
+    <line x1="82" y1="16" x2="82" y2="32" stroke="#388E3C" stroke-width="3" stroke-linecap="round"/>
+    <!-- 唐辛子本体（右：オレンジ赤） -->
+    <path d="M82 32 Q96 34 102 52 Q106 69 100 89 Q94 109 86 112 Q78 112 74 92 Q70 70 72 52 Q76 34 82 32Z"
+      fill="#FF5722"/>
+    <path d="M82 32 Q96 34 102 52 Q106 69 100 89 Q94 109 86 112 Q78 112 74 92 Q70 70 72 52 Q76 34 82 32Z"
+      fill="none" stroke="#BF360C" stroke-width="2"/>
+    <!-- ハイライト（右） -->
+    <path d="M78 42 Q82 38 88 46 Q84 40 78 42Z" fill="rgba(255,255,255,.4)"/>
+    <ellipse cx="80" cy="52" rx="5" ry="12" fill="rgba(255,255,255,.2)" transform="rotate(-8,80,52)"/>
+    <!-- 先っぽ（右） -->
+    <path d="M86 112 Q88 118 84 122 Q82 116 86 112Z" fill="#BF360C"/>
+  </symbol>
+
+</svg>
+
+<script>
+// ===================================================
+// 定数・状態
+// ===================================================
+const RING_R      = 88;
+const RING_CIRCUM = 2 * Math.PI * RING_R;
+
+let totalSec    = 0, remainSec   = 0;
+let intervalId  = null, isRunning = false, soundOn = true;
+let audioCtx    = null, alarmActive = false;
+const shownCounts = new Set();
+
+// ===================================================
+// DOM
+// ===================================================
+const appEl             = document.getElementById('app');
+const timeDisplay       = document.getElementById('time-display');
+const statusText        = document.getElementById('status-text');
+const ringProg          = document.getElementById('ring-prog');
+const ringSvg           = document.getElementById('ring-svg');
+const btnStart          = document.getElementById('btn-start');
+const btnReset          = document.getElementById('btn-reset');
+const btnMute           = document.getElementById('btn-mute');
+const stopSoundBtn      = document.getElementById('stop-sound-btn');
+const doneOverlay       = document.getElementById('done-overlay');
+const btnOk             = document.getElementById('btn-ok');
+const opacitySlider     = document.getElementById('opacity-slider');
+const countdownLayer    = document.getElementById('countdown-layer');
+const countdownNum      = document.getElementById('countdown-num');
+const chipsLayer        = document.getElementById('chips-layer');
+const chipsContainer    = document.getElementById('chips-container');
+const confettiContainer = document.getElementById('confetti-container');
+const presetBtns        = document.querySelectorAll('.preset-btn');
+const mainEl            = document.getElementById('main');
+const customModal       = document.getElementById('custom-modal');
+const customMinInput    = document.getElementById('custom-min');
+const customSecInput    = document.getElementById('custom-sec');
+
+// ring-svgは静的サイズ(220x220)なのでsyncは不要
+function syncRingSize() {}
+
+// ===================================================
+// オーディオ
+// ===================================================
+function getAudioCtx() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  return audioCtx;
+}
+function beep(freq, dur, vol=0.07, type='sine') {
+  if (!soundOn) return;
+  try {
+    const ctx=getAudioCtx(), osc=ctx.createOscillator(), g=ctx.createGain();
+    osc.type=type; osc.frequency.setValueAtTime(freq,ctx.currentTime);
+    g.gain.setValueAtTime(vol,ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+dur);
+    osc.connect(g); g.connect(ctx.destination); osc.start(); osc.stop(ctx.currentTime+dur);
+  } catch(e){}
+}
+
+// かわいいポップな音を1音鳴らす（sine＋高めの周波数、アタック＋リリース）
+function popNote(freq, startTime, dur=0.18, vol=0.55) {
+  if (!soundOn) return;
+  try {
+    const ctx = getAudioCtx();
+    // ── メイン音（sine：まるっとした音色） ──
+    const osc = ctx.createOscillator();
+    const g   = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(freq, startTime);
+    // ピッチを少し上げてキュートな印象に
+    osc.frequency.linearRampToValueAtTime(freq * 1.04, startTime + dur * 0.3);
+    g.gain.setValueAtTime(0, startTime);
+    g.gain.linearRampToValueAtTime(vol, startTime + 0.02);       // アタック
+    g.gain.exponentialRampToValueAtTime(0.001, startTime + dur); // リリース
+    osc.connect(g); g.connect(ctx.destination);
+    osc.start(startTime); osc.stop(startTime + dur);
+
+    // ── 倍音（triangle：柔らかさを足す） ──
+    const osc2 = ctx.createOscillator();
+    const g2   = ctx.createGain();
+    osc2.type = 'triangle';
+    osc2.frequency.setValueAtTime(freq * 2, startTime);
+    g2.gain.setValueAtTime(0, startTime);
+    g2.gain.linearRampToValueAtTime(vol * 0.3, startTime + 0.02);
+    g2.gain.exponentialRampToValueAtTime(0.001, startTime + dur * 0.7);
+    osc2.connect(g2); g2.connect(ctx.destination);
+    osc2.start(startTime); osc2.stop(startTime + dur);
+  } catch(e){}
+}
+
+function beepCountdown(num) {
+  // カウントダウンも同じpopNoteで統一（少し小さめ）
+  const ctx = getAudioCtx();
+  popNote(440 + (10 - num) * 40, ctx.currentTime, 0.20, 0.35);
+}
+
+function startAlarm() {
+  if (!soundOn) return;
+  alarmActive = true;
+
+  // かわいいメロディパターン（ド・ミ・ソ・ド高・ソ・ミ を繰り返し）
+  // C5=523, E5=659, G5=784, C6=1047
+  const MELODY = [523, 659, 784, 1047, 784, 659];
+  const NOTE_DUR   = 0.22;  // 1音の長さ
+  const NOTE_GAP   = 0.28;  // 音と音の間隔
+  const LOOP_PAUSE = 0.55;  // 1ループ後の休止
+
+  function playLoop() {
+    if (!alarmActive) return;
+    const ctx = getAudioCtx();
+    const t0  = ctx.currentTime + 0.02;
+    MELODY.forEach((freq, i) => {
+      popNote(freq, t0 + i * NOTE_GAP, NOTE_DUR, 0.55);
+    });
+    const loopLen = MELODY.length * NOTE_GAP + LOOP_PAUSE;
+    setTimeout(() => { if (alarmActive) playLoop(); }, loopLen * 1000);
+  }
+  playLoop();
+}
+function stopAlarm() { alarmActive = false; }
+
+// ===================================================
+// タイマー
+// ===================================================
+function fmt(s){ return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0'); }
+
+function updateDisplay() {
+  timeDisplay.textContent = fmt(remainSec);
+  const pct = totalSec>0 ? remainSec/totalSec : 1;
+  ringProg.style.strokeDashoffset = RING_CIRCUM*(1-pct);
+  const urgent = remainSec>0 && remainSec<=10 && totalSec>0;
+  timeDisplay.classList.toggle('urgent-glow', urgent && isRunning);
+  ringProg.style.stroke = urgent ? '#FF2244' : 'url(#ringGrad)';
+}
+function startTimer() {
+  if (remainSec<=0) return;
+  isRunning=true; btnStart.textContent='⏸'; statusText.textContent='計測中…';
+  shownCounts.clear();
+  intervalId = setInterval(()=>{
+    remainSec--;
+    if (remainSec>0 && remainSec<=10 && !shownCounts.has(remainSec)) {
+      shownCounts.add(remainSec);
+      showCountdown(remainSec);
+      beepCountdown(remainSec);
+    }
+    updateDisplay();
+    if (remainSec<=0) {
+      clearInterval(intervalId); isRunning=false;
+      btnStart.textContent='▶'; statusText.textContent='完了！';
+      timeDisplay.classList.remove('urgent-glow');
+      onComplete();
+    }
+  },1000);
+}
+function pauseTimer() {
+  clearInterval(intervalId); isRunning=false;
+  btnStart.textContent='▶'; statusText.textContent='一時停止';
+  timeDisplay.classList.remove('urgent-glow');
+}
+function resetTimer() {
+  clearInterval(intervalId); stopAlarm(); isRunning=false;
+  remainSec=totalSec; btnStart.textContent='▶';
+  statusText.textContent=totalSec>0?'設定済み':'設定してスタート';
+  timeDisplay.classList.remove('urgent-glow');
+  ringProg.style.stroke='url(#ringGrad)';
+  stopSoundBtn.style.display='none'; doneOverlay.style.display='none';
+  // カウントダウン画面が残っていたら消す・タイマー本体を再表示
+  countdownLayer.style.display='none';
+  mainEl.style.display = 'flex';
+  clearTimeout(countdownLayer._hideTimer);
+  updateDisplay();
+}
+function applyTime(mins, secs) {
+  if (isRunning) pauseTimer();
+  totalSec=Math.max(0,mins)*60+Math.max(0,Math.min(59,secs));
+  remainSec=totalSec;
+  presetBtns.forEach(b=>b.classList.remove('active'));
+  statusText.textContent=totalSec>0?'設定済み':'設定してスタート';
+  ringProg.style.stroke='url(#ringGrad)';
+  timeDisplay.classList.remove('urgent-glow');
+  stopSoundBtn.style.display='none';
+  updateDisplay();
+}
+function setPreset(minutes) {
+  applyTime(minutes,0);
+  presetBtns.forEach(b=>b.classList.toggle('active',+b.dataset.minutes===minutes));
+}
+
+// ===================================================
+// カウントダウン大表示
+// ===================================================
+const COUNTDOWN_COLORS = [
+  '#FF2244','#FF6B00','#FFD600','#00CC66',
+  '#0088FF','#8B2BE2','#FF3D8B','#00C8E0',
+  '#FFFFFF','#FFD600'
+];
+// 色ごとに2重のtext-shadowをつけてぷるん感強化
+const COUNTDOWN_SHADOWS = [
+  ['#FF2244','#FF8888'],
+  ['#FF6B00','#FFB566'],
+  ['#FFD600','#FFF176'],
+  ['#00CC66','#69F0AE'],
+  ['#0088FF','#82B1FF'],
+  ['#8B2BE2','#CE93D8'],
+  ['#FF3D8B','#F48FB1'],
+  ['#00C8E0','#80DEEA'],
+  ['#AAAAFF','#FFFFFF'],
+  ['#FFD600','#FFF176'],
+];
+
+function showCountdown(num) {
+  const idx  = 10 - num;
+  const col  = COUNTDOWN_COLORS[idx] || '#fff';
+  const [,c2] = COUNTDOWN_SHADOWS[idx] || [col,'#fff'];
+
+  // タイマー本体を完全削除（display:none）— 一度消したら次の数字でも消したまま
+  mainEl.style.display = 'none';
+
+  countdownNum.textContent = num;
+  countdownNum.style.color = col;
+  countdownNum.style.webkitTextStroke = `7px ${c2}`;
+  countdownNum.style.textShadow =
+    `0 6px 0 rgba(0,0,0,.18),`+
+    `0 12px 0 rgba(0,0,0,.10)`;
+
+  // カウントダウンレイヤーを表示（次の数字まで消さない）
+  countdownLayer.style.display = 'flex';
+  clearTimeout(countdownLayer._hideTimer);
+
+  // アニメーションリセット（wobble）
+  countdownNum.style.animation = 'none';
+  void countdownNum.offsetHeight;
+  countdownNum.style.animation = 'cdWobble 1.0s cubic-bezier(.34,1.56,.64,1) forwards';
+}
+
+// ===================================================
+// タイムアップ演出
+// ===================================================
+function onComplete() {
+  // カウントダウンレイヤーを消す（「1」の後にchipsLayerに切り替わる）
+  countdownLayer.style.display = 'none';
+  mainEl.style.display = 'flex';
+  startAlarm();
+  stopSoundBtn.style.display = 'block';
+  chipsLayer.style.display   = 'flex';
+  launchChipsAnimation();
+}
+
+const CONFETTI_COLORS = ['#FFD600','#FF3D8B','#0088FF','#00CC66','#FF6B00','#8B2BE2','#00C8E0','#FF2244','#FFFFFF'];
+
+// ---- SVGイラストをHTMLとしてinlineで生成する関数 ----
+function makeSvgEl(symbolId, size) {
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('width',  size);
+  svg.setAttribute('height', size);
+
+  // viewBoxをsymbolから取得
+  const sym = document.getElementById(symbolId);
+  if (!sym) return null;
+  const vb = sym.getAttribute('viewBox') || `0 0 ${size} ${size}`;
+  svg.setAttribute('viewBox', vb);
+  svg.setAttribute('xmlns', ns);
+
+  // symbolの子要素をすべてコピー
+  sym.childNodes.forEach(child => {
+    svg.appendChild(child.cloneNode(true));
+  });
+  return svg;
+}
+
+// 絵文字（キャラ以外の彩り）
+const EMOJI_ITEMS = ['🥔','🍟','🍿','✨','⭐','🌟','💫','🎉','🎊','🔥','💥','🌈','🎈'];
+
+// SVGキャラ4種の定義（sizeMultiplierで個別倍率指定）
+const SVG_ILLUSTS = [
+  { id:'illust-blueberry', vw:120, vh:80,  sizeMult:2.0 },  // 2倍
+  { id:'illust-chipchan',  vw:110, vh:120, sizeMult:1.0 },  // そのまま
+  { id:'illust-bee',       vw:110, vh:120, sizeMult:1.0 },  // そのまま
+  { id:'illust-chili',     vw:120, vh:130, sizeMult:1.5 },  // 1.5倍
+];
+
+// 4方向の着地先（画面の四隅寄り）
+// ±offset で中央から四隅方向に飛ばす
+function getCornerTargets() {
+  const w  = window.innerWidth;
+  const h  = window.innerHeight;
+  const cx = w / 2;
+  const cy = h / 2;
+  const px = w * 0.30; // 左右方向の距離
+  const py = h * 0.28; // 上下方向の距離
+  return [
+    { tx: -px, ty: -py }, // 左上
+    { tx:  px, ty: -py }, // 右上
+    { tx: -px, ty:  py }, // 左下
+    { tx:  px, ty:  py }, // 右下
+  ];
+}
+
+function spawnSvgCharacter(illustData, corner) {
+  const el = document.createElement('div');
+  el.className = 'chip-item';
+  el.style.position = 'absolute';
+
+  const baseSize = Math.round(140 * (illustData.sizeMult || 1)); // 倍率適用
+  const ratio    = illustData.vh / illustData.vw;
+  const svgEl    = makeSvgEl(illustData.id, baseSize);
+  if (!svgEl) return;
+  svgEl.style.width   = baseSize + 'px';
+  svgEl.style.height  = Math.round(baseSize * ratio) + 'px';
+  svgEl.style.display = 'block';
+  el.appendChild(svgEl);
+
+  // 飛び出し起点：中央
+  const cx = window.innerWidth  / 2;
+  const cy = window.innerHeight / 2 - 20;
+  el.style.left = cx + 'px';
+  el.style.top  = cy + 'px';
+  el.style.transformOrigin = '0 0';
+
+  const { tx, ty } = corner;
+  const rot = (tx > 0 ? 1 : -1) * (15 + Math.random() * 20); // 四隅方向に少し傾く
+
+  // フェーズ①：ゆっくり四隅に着地（2.0〜2.8秒）
+  const flyDur = 2000 + Math.random() * 800;
+  const flyAnim = el.animate([
+    { transform:`translate(0,0) rotate(0deg) scale(0.1)`, opacity:0.9 },
+    { transform:`translate(${tx*.55}px,${ty*.55}px) rotate(${rot*.5}deg) scale(1.15)`, opacity:1, offset:0.5 },
+    { transform:`translate(${tx}px,${ty}px) rotate(${rot}deg) scale(1.0)`, opacity:1 }
+  ], { duration:flyDur, easing:'cubic-bezier(.2,.6,.3,1)', fill:'forwards' });
+
+  chipsContainer.appendChild(el);
+
+  // フェーズ②：ふわふわ浮かぶ（無限ループ）
+  const floatAmp = 12 + Math.random() * 10;
+  const floatDur = 2200 + Math.random() * 1400;
+  let floatAnim  = null;
+
+  flyAnim.addEventListener('finish', () => {
+    floatAnim = el.animate([
+      { transform:`translate(${tx}px,${ty}px) rotate(${rot}deg) scale(1.0)` },
+      { transform:`translate(${tx}px,${ty - floatAmp}px) rotate(${rot + 4}deg) scale(1.04)` },
+      { transform:`translate(${tx}px,${ty}px) rotate(${rot}deg) scale(1.0)` }
+    ], { duration:floatDur, easing:'ease-in-out', iterations:Infinity });
+  });
+
+  // 演出終了の少し前にフェードアウト
+  const lifeTime = flyDur + 4200;
+  setTimeout(() => {
+    if (floatAnim) floatAnim.cancel();
+    el.animate([{ opacity:1 },{ opacity:0 }], { duration:600, fill:'forwards' });
+    setTimeout(() => el.remove(), 650);
+  }, lifeTime);
+}
+
+function spawnEmojiChip() {
+  const el = document.createElement('div');
+  el.className = 'chip-item';
+  el.style.position = 'absolute';
+  const fontSize = 60 + Math.floor(Math.random() * 60); // 60~120px
+  el.style.fontSize = fontSize + 'px';
+  el.textContent = EMOJI_ITEMS[Math.floor(Math.random() * EMOJI_ITEMS.length)];
+
+  const cx = window.innerWidth  / 2;
+  const cy = window.innerHeight / 2 - 20;
+  el.style.left = cx + 'px';
+  el.style.top  = cy + 'px';
+  el.style.transformOrigin = '0 0';
+
+  const angle   = Math.random() * Math.PI * 2;
+  const maxDist = Math.max(window.innerWidth, window.innerHeight) * 0.7;
+  const dist    = 160 + Math.random() * maxDist;
+  const tx      = Math.cos(angle) * dist;
+  const ty      = Math.sin(angle) * dist - 80;
+  const rot     = (Math.random() - 0.5) * 720;
+  const dur     = 1.8 + Math.random() * 1.2;
+
+  el.animate([
+    { transform:`translate(0,0) rotate(0deg) scale(0.1)`, opacity:1 },
+    { transform:`translate(${tx*.5}px,${ty*.5}px) rotate(${rot*.4}deg) scale(1.2)`, opacity:1, offset:.45 },
+    { transform:`translate(${tx}px,${ty + window.innerHeight*.3}px) rotate(${rot}deg) scale(.3)`, opacity:0 }
+  ], { duration:dur*1000, easing:'cubic-bezier(.25,.46,.45,.94)', fill:'forwards' });
+
+  chipsContainer.appendChild(el);
+  setTimeout(()=>el.remove(), (dur+.4)*1000);
+}
+
+function spawnConfetti() {
+  const el = document.createElement('div');
+  el.className = 'confetti';
+  el.style.background = CONFETTI_COLORS[Math.floor(Math.random()*CONFETTI_COLORS.length)];
+  const w = 8+Math.random()*16, h = 8+Math.random()*16;
+  el.style.width=w+'px'; el.style.height=h+'px';
+  el.style.borderRadius = Math.random()>.4 ? '50%' : (Math.random()>.5?'2px':'0');
+  el.style.left = Math.random()*window.innerWidth+'px';
+  el.style.top  = '-20px';
+  const dur=1.2+Math.random()*2.5, tx=(Math.random()-.5)*300;
+  el.animate([
+    { transform:`translate(0,0) rotate(0deg) scaleX(1)`, opacity:1 },
+    { transform:`translate(${tx*.5}px,${window.innerHeight*.5}px) rotate(${Math.random()*360}deg) scaleX(${.4+Math.random()*.8})`, opacity:.8, offset:.6 },
+    { transform:`translate(${tx}px,${window.innerHeight+40}px) rotate(${Math.random()*720}deg) scaleX(.2)`, opacity:0 }
+  ], { duration:dur*1000, easing:'linear', fill:'forwards' });
+  confettiContainer.appendChild(el);
+  setTimeout(()=>el.remove(),(dur+.3)*1000);
+}
+
+function spawnStar() {
+  const el = document.createElement('div');
+  el.className = 'star';
+  el.textContent = ['⭐','🌟','✨','💫','🎊','🎉'][Math.floor(Math.random()*6)];
+  const sz = 20+Math.floor(Math.random()*32);
+  el.style.fontSize = sz+'px';
+  el.style.left=(5+Math.random()*90)+'vw';
+  el.style.top =(5+Math.random()*90)+'vh';
+  el.style.setProperty('--tx',(Math.random()-.5)*320+'px');
+  el.style.setProperty('--ty',-(80+Math.random()*220)+'px');
+  document.body.appendChild(el);
+  setTimeout(()=>el.remove(),2600);
+}
+
+function clearChips() {
+  // 全要素とそのアニメーションをまとめて消去
+  chipsContainer.innerHTML = '';
+  confettiContainer.innerHTML = '';
+}
+
+function launchChipsAnimation() {
+  const bagSvg = document.getElementById('bag-svg');
+  setTimeout(()=>{
+    bagSvg.animate([
+      {transform:'scale(1) rotate(0deg)'},
+      {transform:'scale(1.7) rotate(-10deg)', offset:.28},
+      {transform:'scale(1.5) rotate(7deg)',   offset:.52},
+      {transform:'scale(1.6) rotate(-4deg)',  offset:.72},
+      {transform:'scale(1.55) rotate(0deg)'}
+    ], {duration:650, easing:'ease-out', fill:'forwards'});
+
+    // ── SVGキャラ4種を四隅に1体ずつ（時間差で飛ばす）──
+    const corners = getCornerTargets();
+    SVG_ILLUSTS.forEach((illust, i) => {
+      setTimeout(() => spawnSvgCharacter(illust, corners[i]), i * 120);
+    });
+
+    // ── 絵文字を多めに（賑やかし）──
+    for (let i=0; i<50; i++) setTimeout(()=>spawnEmojiChip(), i*50 + 200);
+
+    // 紙吹雪
+    for (let i=0; i<100; i++) setTimeout(()=>spawnConfetti(), i*22+100);
+    // スター
+    for (let i=0; i<35;  i++) setTimeout(()=>spawnStar(),    i*60);
+  }, 400);
+
+  // 4.3秒後：発表タイム画面に切り替え（演出を1.5秒延長）
+  setTimeout(()=>{
+    chipsLayer.style.display='none';
+    clearChips();
+    doneOverlay.style.display='flex';
+  }, 4300);
+
+  // 4秒後：音を自動停止（メロディ約2.2秒×4ループ＝約9秒でキリよく）
+  setTimeout(()=>{ stopAlarm(); }, 9000);
+
+  // 8秒後：「はじめに戻る」ボタンを表示
+  setTimeout(()=>{
+    btnOk.style.display='block';
+  }, 8000);
+}
+
+// ===================================================
+// イベントリスナー
+// ===================================================
+btnStart.addEventListener('click',()=>{ if(isRunning) pauseTimer(); else if(remainSec>0) startTimer(); });
+btnReset.addEventListener('click', resetTimer);
+btnMute.addEventListener('click',()=>{
+  soundOn=!soundOn;
+  btnMute.textContent=soundOn?'🔊':'🔇';
+  btnMute.classList.toggle('muted',!soundOn);
+  if(!soundOn) stopAlarm();
+});
+stopSoundBtn.addEventListener('click',()=>{ stopAlarm(); stopSoundBtn.style.display='none'; });
+btnOk.addEventListener('click',()=>{
+  stopAlarm();
+  doneOverlay.style.display='none';
+  btnOk.style.display='none';
+  stopSoundBtn.style.display='none';
+  clearChips();
+  resetTimer();
+});
+presetBtns.forEach(btn=>btn.addEventListener('click',()=>setPreset(+btn.dataset.minutes)));
+opacitySlider.addEventListener('input',()=>{
+  appEl.style.setProperty('--bg-main',`rgba(10,8,30,${opacitySlider.value/100})`);
+  // カウントダウンレイヤーの背景も合わせる
+  countdownLayer.style.setProperty('background',`rgba(10,8,30,${opacitySlider.value/100})`);
+});
+
+// カスタム設定
+document.getElementById('btn-open-custom').addEventListener('click',()=>{
+  customMinInput.value=''; customSecInput.value='';
+  customModal.style.display='flex'; customMinInput.focus();
+});
+document.getElementById('btn-cancel-custom').addEventListener('click',()=>{ customModal.style.display='none'; });
+document.getElementById('btn-set-custom').addEventListener('click', applyCustomTime);
+[customMinInput,customSecInput].forEach(el=>el.addEventListener('keydown',e=>{ if(e.key==='Enter') applyCustomTime(); }));
+customModal.addEventListener('click',e=>{ if(e.target===customModal) customModal.style.display='none'; });
+document.querySelector('.custom-card').addEventListener('mousedown',e=>e.stopPropagation());
+
+function applyCustomTime() {
+  const m=parseInt(customMinInput.value)||0, s=parseInt(customSecInput.value)||0;
+  if(m<=0&&s<=0){ customMinInput.style.borderColor='var(--col-red)'; setTimeout(()=>customMinInput.style.borderColor='',800); return; }
+  applyTime(m,s); customModal.style.display='none';
+}
+
+// 最小化・閉じる
+let collapsed=false;
+document.getElementById('btn-collapse').addEventListener('click',()=>{
+  collapsed=!collapsed; mainEl.style.display=collapsed?'none':'flex';
+});
+document.getElementById('btn-close').addEventListener('click',()=>window.close());
+
+// ===================================================
+// ドラッグ
+// ===================================================
+const dragBar=document.getElementById('drag-bar');
+let dragging=false,ox=0,oy=0;
+dragBar.addEventListener('mousedown',e=>{
+  if(e.target.classList.contains('w-dot')) return;
+  dragging=true; ox=e.clientX-appEl.getBoundingClientRect().left; oy=e.clientY-appEl.getBoundingClientRect().top;
+  document.body.style.cursor='grabbing';
+});
+document.addEventListener('mousemove',e=>{
+  if(!dragging) return;
+  appEl.style.left=Math.max(0,e.clientX-ox)+'px';
+  appEl.style.top =Math.max(0,e.clientY-oy)+'px';
+  appEl.style.width='auto'; appEl.style.height='auto';
+});
+document.addEventListener('mouseup',()=>{ dragging=false; document.body.style.cursor=''; });
+
+// ===================================================
+// 初期化
+// ===================================================
+window.addEventListener('load',()=>{
+  syncRingSize();
+  ringProg.style.strokeDasharray  = RING_CIRCUM;
+  ringProg.style.strokeDashoffset = RING_CIRCUM;
+  // カウントダウンレイヤーの背景初期値
+  countdownLayer.style.background = 'rgba(10,8,30,0.88)';
+  updateDisplay();
+});
+window.addEventListener('resize', syncRingSize);
+</script>
+</body>
+</html>
